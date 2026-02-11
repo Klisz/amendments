@@ -1,8 +1,12 @@
 package net.mehvahdjukaar.amendments.integration;
 
+import com.google.common.base.Suppliers;
 import net.mehvahdjukaar.amendments.Amendments;
 import net.mehvahdjukaar.moonlight.api.platform.PlatHelper;
 import net.mehvahdjukaar.supplementaries.Supplementaries;
+import net.minecraft.world.entity.EntityType;
+
+import java.util.function.Supplier;
 
 public class CompatHandler {
 
@@ -13,7 +17,7 @@ public class CompatHandler {
     public static final boolean TORCHSLAB = PlatHelper.isModLoaded("torch_slab");
     public static final boolean BUZZIER_BEES = PlatHelper.isModLoaded("buzzier_bees");
     public static final boolean SHIMMER = PlatHelper.isModLoaded("shimmer");
-    public static final boolean SOUL_FIRED = PlatHelper.isModLoaded("soul_fire_d");
+    public static final boolean SOUL_FIRED = PlatHelper.isModLoaded("soul_fire_d") && false; //TODO: add back
     public static final boolean CAVE_ENHANCEMENTS = PlatHelper.isModLoaded("cave_enhancements");
     public static final boolean FLAN = PlatHelper.isModLoaded("flan");
     public static final boolean BLUEPRINT = PlatHelper.isModLoaded("blueprint");
@@ -35,5 +39,7 @@ public class CompatHandler {
         }
         FARMERS_DELIGHT = fd;
     }
+
+
 }
 

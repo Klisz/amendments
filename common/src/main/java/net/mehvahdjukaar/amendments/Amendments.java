@@ -19,9 +19,12 @@ import net.mehvahdjukaar.moonlight.api.util.DispenserHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.dispenser.BlockSource;
+import net.minecraft.core.dispenser.ProjectileDispenseBehavior;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
+import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.LevelAccessor;
@@ -29,7 +32,6 @@ import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SupportType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.RailShape;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,6 +54,7 @@ public class Amendments {
     }
 
     public static void init() {
+        Dummy.MOD_LOADED = true;
         CommonConfigs.init();
         ModRegistry.init();
         ModNetwork.init();
@@ -65,15 +68,24 @@ public class Amendments {
         RegHelper.addDynamicDispenserBehaviorRegistration(Amendments::registerDispenserBehaviors);
 
         RegHelper.registerSimpleRecipeCondition(res("flag"), CommonConfigs::isFlagOn);
+        RegHelper.addItemsToTabsRegistration(Amendments::addItemsToTabs);
+        RegHelper.addExtraPOIStatesRegistration(Amendments::addExtraPoiStates);
 
+
+        //TODO: fix sign y offset on FD one and wall signs have weird scale
+        //TODO: check all fireballs & dispenser
         // configurable models for wall lanterns and skulls
         // todo: finish porting
 
+        // register 1 wall lantern per type
         // make bell connections
-
-        // add wall lantern stand model override instead of texture one
+//healing particles
+        //snow golems healing in snow
+        //TODO: fix candle holder particle
+        // TODO: add sound for wind change and improve fire charge sounds
+        //improved entity sync time
+        //improved range at which sound plays and such
         // mud slows down mobs
-        //TODO: check bell ringing with rope
         //here we go. ideas part 2
         //carpeted trapdoor
         //flower pot broken color and grass
@@ -92,23 +104,35 @@ public class Amendments {
     }
 
 
+
+    private static void addItemsToTabs(RegHelper.ItemToTabEvent itemToTabEvent) {
+        if (CommonConfigs.THROWABLE_FIRE_CHARGES.get()) {
+            itemToTabEvent.addBefore(CreativeModeTabs.COMBAT,
+                    i -> i.is(Items.SNOWBALL), Items.FIRE_CHARGE);
+            if (CommonConfigs.DRAGON_CHARGE.get()) {
+                itemToTabEvent.addBefore(CreativeModeTabs.COMBAT,
+                        i -> i.is(Items.SNOWBALL), ModRegistry.DRAGON_CHARGE.get());
+            }
+        }
+    }
+
+    private static void addExtraPoiStates(RegHelper.ExtraPOIStatesEvent event) {
+        event.addBlocks(PoiTypes.LEATHERWORKER, List.of(ModRegistry.LIQUID_CAULDRON.get(), ModRegistry.DYE_CAULDRON.get()));
+    }
+
+
     private static void setup() {
         if (CommonConfigs.INVERSE_POTIONS.get() == null) {
             throw new IllegalStateException("Inverse potions config is null. How??");
         }
         if (CompatHandler.SUPPLEMENTARIES) SuppCompat.setup();
 
-        var holder = BuiltInRegistries.POINT_OF_INTEREST_TYPE.getHolderOrThrow(PoiTypes.LEATHERWORKER);
-        var set = new HashSet<>(holder.value().matchingStates);
-        Set<BlockState> extraStates = Stream.of(ModRegistry.LIQUID_CAULDRON.get(), ModRegistry.DYE_CAULDRON.get()).flatMap(
-                (block) -> block.getStateDefinition().getPossibleStates().stream()).collect(Collectors.toSet());
-        set.addAll(extraStates);
-        holder.value().matchingStates = set;
-        PoiTypes.registerBlockStates(holder, extraStates);
+        ModRegistry.registerAdditionalPlacements();
     }
 
     private static void setupAsync() {
         FlowerPotHandler.setup();
+        ClientConfigs.setup();
     }
 
     public static void onReload(RegistryAccess registryAccess, boolean client) {
@@ -117,21 +141,48 @@ public class Amendments {
     }
 
 
-    @EventCalled
     private static void registerDispenserBehaviors(DispenserHelper.Event event) {
-        for (SoftFluid f : SoftFluidRegistry.getRegistry(event.getRegistryAccess())) {
-            Set<Item> itemSet = new HashSet<>();
-            Collection<FluidContainerList.Category> categories = f.getContainerList().getCategories();
-            for (FluidContainerList.Category c : categories) {
-                for (Item full : c.getFilledItems()) {
-                    if (full != Items.AIR && !itemSet.contains(full)) {
-                        event.register(new CauldronConversion.DispenserBehavior(full));
-                        itemSet.add(full);
-                    }
+        for (SoftFluid f : SoftFluidRegistry.get(event.getRegistryAccess())) {
+            registerFluidBehavior(f, event);
+        }
+
+        //todo: also do for cauldron with bucket and dispensers and such
+        if (CommonConfigs.FIRE_CHARGE_DISPENSER.get() && CommonConfigs.THROWABLE_FIRE_CHARGES.get()) {
+            event.register(Items.FIRE_CHARGE, new ProjectileDispenseBehavior(Items.FIRE_CHARGE) {
+
+                @Override
+                protected void playSound(BlockSource source) {
+                    source.level().levelEvent(1018, source.pos(), 0);
+                }
+            });
+        }
+        if (CommonConfigs.DRAGON_CHARGE.get()) {
+            event.register(ModRegistry.DRAGON_CHARGE.get(), new ProjectileDispenseBehavior(ModRegistry.DRAGON_CHARGE.get()) {
+
+                @Override
+                protected void playSound(BlockSource source) {
+                    //TODO:customsound
+                    source.level().levelEvent(1018, source.pos(), 0);
+                }
+            });
+
+        }
+    }
+
+
+    public static void registerFluidBehavior(SoftFluid f, DispenserHelper.Event event) {
+        Set<Item> itemSet = new HashSet<>();
+        Collection<FluidContainerList.Category> categories = f.getContainerList().getCategories();
+        for (FluidContainerList.Category c : categories) {
+            for (Item full : c.getFilledItems()) {
+                if (full != Items.AIR && !itemSet.contains(full)) {
+                    event.register(new CauldronConversion.DispenserBehavior(full));
+                    itemSet.add(full);
                 }
             }
         }
     }
+
 
     public static boolean isSupportingCeiling(BlockPos pos, LevelReader world) {
         return isSupportingCeiling(world.getBlockState(pos), pos, world);

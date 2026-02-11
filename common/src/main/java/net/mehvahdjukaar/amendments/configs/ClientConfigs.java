@@ -2,11 +2,22 @@ package net.mehvahdjukaar.amendments.configs;
 
 import net.mehvahdjukaar.amendments.Amendments;
 import net.mehvahdjukaar.amendments.common.PendulumAnimation;
+import net.mehvahdjukaar.amendments.integration.CompatHandler;
 import net.mehvahdjukaar.moonlight.api.ModSharedVariables;
 import net.mehvahdjukaar.moonlight.api.platform.configs.ConfigBuilder;
 import net.mehvahdjukaar.moonlight.api.platform.configs.ConfigType;
 import net.mehvahdjukaar.moonlight.api.platform.configs.ModConfigHolder;
+import net.mehvahdjukaar.moonlight.api.set.wood.WoodType;
+import net.mehvahdjukaar.moonlight.api.set.wood.WoodTypeRegistry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 
 public class ClientConfigs {
@@ -27,6 +38,8 @@ public class ClientConfigs {
     public static final Supplier<Boolean> POTION_TEXTURE;
     public static final Supplier<Boolean> JUKEBOX_MODEL;
     public static final Supplier<Boolean> JUKEBOX_SPIN;
+    public static final Supplier<Boolean> TEXTURE_PACK_SUPPORT;
+    public static final Supplier<GenMode> DYNAMIC_ASSETS_GEN_MODE;
 
     public static final Supplier<Boolean> FAST_LANTERNS;
     public static final Supplier<Boolean> LANTERN_HOLDING;
@@ -44,9 +57,20 @@ public class ClientConfigs {
     public static final Supplier<Boolean> CAMPFIRE_SMOKE;
 
     public static final Supplier<Boolean> PIXEL_CONSISTENT_SIGNS;
+    public static final Supplier<List<String>> SIGN_BLACKLIST;
 
     public static final Supplier<Boolean> COLORED_ARROWS;
     public static final Supplier<Boolean> FAST_HOOKS;
+
+    public static final Supplier<Boolean> FIREBALL_3D;
+    public static final Supplier<Boolean> GHAST_FIREBALL_TRAIL;
+    public static final Supplier<Boolean> DRAGON_BREATH_EMISSIBE;
+    public static final Supplier<Boolean> DRAGON_FIREBALL_TRAIL;
+
+    public static final Supplier<Boolean> SNOWBALL_3D;
+    public static final Supplier<Boolean> SLIMEBALL_3D;
+    public static final Supplier<Boolean> CHARGES_TUMBLE;
+    public static final Supplier<Boolean> PROJECTILE_TUMBLE;
 
     public static final Supplier<Double> BRIGHTEN_SIGN_TEXT_COLOR;
 
@@ -55,6 +79,7 @@ public class ClientConfigs {
 
     public static final ModConfigHolder SPEC;
 
+
     static {
         ConfigBuilder builder = ConfigBuilder.create(Amendments.MOD_ID, ConfigType.CLIENT);
 
@@ -62,14 +87,46 @@ public class ClientConfigs {
         builder.push("general");
         TOOLTIP_HINTS = builder.define("tooltip_hints", true);
         CUSTOM_CONFIGURED_SCREEN = builder.define("custom_configured_screen", true);
+        TEXTURE_PACK_SUPPORT = builder.comment("Makes dynamically generated assets depend on texture packs too and not just vanilla files")
+                .define("texture_pack_support", false);
+        DYNAMIC_ASSETS_GEN_MODE = builder.define("dynamic_assets_generation_mode", GenMode.CACHED);
+
         builder.pop();
 
         builder.push("sign");
-        PIXEL_CONSISTENT_SIGNS = builder.comment("Gives signs a pixel consistent model and texture. Also affects other mods")
+        PIXEL_CONSISTENT_SIGNS = builder.comment("Gives signs a pixel consistent model and texture. Also affects other mods. This also makes them use a Block Model, making them render much much much faster than as block entities")
                 .define("pixel_consistent", true);
         BRIGHTEN_SIGN_TEXT_COLOR = builder.comment("A scalar multiplier that will be applied to sign text making it brighter, supposedly more legible")
                 .define("text_color_multiplier", 1.2d, 0, 5);
+        SIGN_BLACKLIST = builder.comment("A list of sign blocks that will NOT be affected by the pixel consistent sign setting. Use full registry names separated by commas")
+                .define("sign_blacklist", new ArrayList<>(),
+                        o -> o instanceof String s && !s.isEmpty());
         builder.pop();
+
+        builder.push("projectiles");
+
+        SNOWBALL_3D = builder.comment("Makes snowballs render in 3D")
+                .define("snowball_3d", true);
+        SLIMEBALL_3D = CompatHandler.SUPPLEMENTARIES ? builder.comment("Makes slimeballs render in 3D (supplementaries only)")
+                .define("slimeball_3d", true) : () -> false;
+        FIREBALL_3D = builder.comment("Makes ghast & blazes fireballs render in 3D")
+                .define("fireball_3d", true);
+        GHAST_FIREBALL_TRAIL = builder.comment("Makes ghast & blazes fireballs leave a trail of particles when moving")
+                .define("ghast_fireball_trail", true);
+        DRAGON_FIREBALL_TRAIL = builder.comment("Makes dragon fireballs leave a trail of particles when moving")
+                .define("dragon_fireball_trail", true);
+        CHARGES_TUMBLE = builder.comment("Makes 3D charges tumble in the air when moving")
+                .define("charges_tumble", true);
+        PROJECTILE_TUMBLE = builder.comment("Makes 3D snowballs and slimeballs (supp compat) tumble in the air when moving")
+                .define("projectiles_tumble", false);
+        builder.push("dragon_fireball");
+        DRAGON_BREATH_EMISSIBE = builder.comment("Makes dragon's breath particles emissive to better match new visuals")
+                .define("dragon_breath_emissive", true);
+
+        builder.pop();
+
+        builder.pop();
+
 
         builder.push("lily_pad");
         LILY_OFFSET = builder.comment("set to 0 tho have lilypads at the same exact position as vanilla." +
@@ -125,7 +182,7 @@ public class ClientConfigs {
         LANTERN_HOLDING = builder.comment("Gives a special animation to lanterns when held in hand")
                 .define("lantern_item_holding", true);
         LANTERN_HOLDING_UP = builder.comment("Makes lantern holding animation have the arm angled more upwards. Looks better if you have dynamic lights on")
-                        .define("lantern_item_holding_up", false);
+                .define("lantern_item_holding_up", false);
         builder.pop();
 
         builder.push("cauldron");
@@ -135,6 +192,7 @@ public class ClientConfigs {
 
         builder.push("jukebox");
         JUKEBOX_MODEL = builder.comment("Use the new jukebox model")
+                .gameRestart()
                 .define("new_model", true);
         JUKEBOX_SPIN = builder.comment("Makes jukebox disc spin while playing")
                 .define("disc_spin", true);
@@ -179,4 +237,29 @@ public class ClientConfigs {
     public static float getItemPixelScale() {
         return hsScale;
     }
+
+    public static boolean isPixelConsistentSign(BlockState state) {
+        if (!PIXEL_CONSISTENT_SIGNS.get()) {
+            return false;
+        }
+        return KNOWN_WOOD_SIGNS.contains(state.getBlock());
+    }
+
+    private static final Set<Block> KNOWN_WOOD_SIGNS = new HashSet<>();
+
+    public static void setup() {
+        for (WoodType w : WoodTypeRegistry.INSTANCE) {
+            Block b = w.getBlockOfThis("sign");
+            Block b1 = w.getBlockOfThis("wall_sign");
+            if (b != null) KNOWN_WOOD_SIGNS.add(b);
+            if (b1 != null) KNOWN_WOOD_SIGNS.add(b1);
+        }
+        for (String s : SIGN_BLACKLIST.get()) {
+            var b = BuiltInRegistries.BLOCK.getOptional(ResourceLocation.parse(s));
+            b.ifPresent(KNOWN_WOOD_SIGNS::remove);
+        }
+    }
+
+
 }
+

@@ -9,9 +9,7 @@ import net.mehvahdjukaar.moonlight.api.map.ExpandedMapData;
 import net.mehvahdjukaar.moonlight.api.set.BlocksColorAPI;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -161,7 +159,11 @@ public class CeilingBannerBlock extends AbstractBannerBlock {
     @Override
     public String getDescriptionId() {
         if (this.descriptionId == null) {
-            this.descriptionId = BlocksColorAPI.getColoredBlock("banner", getColor()).getDescriptionId();
+            Block baseBlock = BlocksColorAPI.getColoredBlock("banner", getColor());
+            if (baseBlock != null) {
+                this.descriptionId = baseBlock.getDescriptionId();
+            } else return "block.amendments.ceiling_banner"; //should never happen
+
         }
         return descriptionId;
     }

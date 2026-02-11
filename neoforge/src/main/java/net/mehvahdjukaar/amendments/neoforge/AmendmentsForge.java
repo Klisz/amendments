@@ -13,6 +13,7 @@ import net.mehvahdjukaar.moonlight.api.platform.PlatHelper;
 import net.mehvahdjukaar.moonlight.api.platform.RegHelper;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.LivingEntity;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -45,7 +46,6 @@ public class AmendmentsForge {
         }
 
         if (CompatHandler.BLUEPRINT) {
-            StructureCauldronHack.register();
             BlueprintIntegration.init();
         }
     }

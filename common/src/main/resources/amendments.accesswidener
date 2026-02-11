@@ -1,15 +1,29 @@
 accessWidener   v2  named
 
+accessible method net/minecraft/world/level/Level getDestroyType (Lnet/minecraft/world/level/GameRules$Key;)Lnet/minecraft/world/level/Explosion$BlockInteraction;
+
 #sign renderer
 accessible method net/minecraft/client/renderer/blockentity/SignRenderer translateSignText (Lcom/mojang/blaze3d/vertex/PoseStack;ZLnet/minecraft/world/phys/Vec3;)V
 accessible method net/minecraft/client/renderer/blockentity/SignRenderer getTextOffset ()Lnet/minecraft/world/phys/Vec3;
 
+accessible field net/minecraft/world/entity/item/ItemEntity pickupDelay I
+accessible field net/minecraft/client/gui/screens/inventory/AbstractSignEditScreen isFrontText Z
+
 accessible field net/minecraft/world/level/block/AbstractCauldronBlock interactions Lnet/minecraft/core/cauldron/CauldronInteraction$InteractionMap;
+
+#explode
+accessible method net/minecraft/network/protocol/game/ClientboundExplodePacket write (Lnet/minecraft/network/RegistryFriendlyByteBuf;)V
+extendable method net/minecraft/network/protocol/game/ClientboundExplodePacket write (Lnet/minecraft/network/RegistryFriendlyByteBuf;)V
+accessible method net/minecraft/network/protocol/game/ClientboundExplodePacket <init> (Lnet/minecraft/network/RegistryFriendlyByteBuf;)V
 
 #banner renderer
 accessible field net/minecraft/client/renderer/blockentity/BannerRenderer bar Lnet/minecraft/client/model/geom/ModelPart;
 accessible field net/minecraft/client/renderer/blockentity/BannerRenderer flag Lnet/minecraft/client/model/geom/ModelPart;
-
+accessible field net/minecraft/world/level/Explosion fire Z
+#area of effect
+accessible field net/minecraft/world/entity/AreaEffectCloud reapplicationDelay I
+accessible method net/minecraft/world/damagesource/DamageSources source (Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/world/entity/Entity;)Lnet/minecraft/world/damagesource/DamageSource;
+accessible method net/minecraft/world/damagesource/DamageSources source (Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/entity/Entity;)Lnet/minecraft/world/damagesource/DamageSource;
 #book edit
 accessible method net/minecraft/client/gui/screens/inventory/BookEditScreen updateLocalCopy ()V
 extendable method net/minecraft/client/gui/screens/inventory/BookEditScreen saveChanges (Z)V

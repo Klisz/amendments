@@ -1,5 +1,7 @@
 package net.mehvahdjukaar.amendments.common.network;
 
+import io.netty.channel.ChannelHandler;
+import net.mehvahdjukaar.amendments.Amendments;
 import net.mehvahdjukaar.moonlight.api.platform.network.NetworkHelper;
 
 public class ModNetwork {
@@ -12,6 +14,7 @@ public class ModNetwork {
         event.registerServerBound(ServerBoundSyncLecternBookMessage.TYPE);
         event.registerClientBound(ClientBoundEntityHitSwayingBlockMessage.TYPE);
         event.registerClientBound(ClientBoundPlaySplashParticlesMessage.TYPE);
+        event.registerClientBound(ClientBoundFireballExplodePacket.TYPE);
     }
 
 }

@@ -6,6 +6,7 @@ import net.mehvahdjukaar.moonlight.api.platform.configs.ConfigBuilder;
 import net.mehvahdjukaar.moonlight.api.platform.configs.ConfigType;
 import net.mehvahdjukaar.moonlight.api.platform.configs.ModConfigHolder;
 import net.mehvahdjukaar.moonlight.api.util.Utils;
+import net.mehvahdjukaar.moonlight.api.util.codec.CodecUtils;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffects;
@@ -18,6 +19,7 @@ import java.util.function.Supplier;
 
 public class CommonConfigs {
 
+
     public enum MixingMode {
         OFF, ONLY_BOILING, ON
     }
@@ -26,11 +28,13 @@ public class CommonConfigs {
 
     public static final Supplier<Boolean> LIQUID_CAULDRON;
     public static final Supplier<Boolean> CONNECT_TO_FENCES;
+    public static final Supplier<Boolean> LAVA_LAYERS;
     public static final Supplier<MixingMode> POTION_MIXING;
     public static final Supplier<Integer> POTION_MIXING_LIMIT;
     public static final Supplier<Map<MobEffect, MobEffect>> INVERSE_POTIONS;
     public static final Supplier<Boolean> DYE_WATER;
-    public static final Supplier<Boolean> CAULDRON_CRAFTING;
+    public static final Supplier<Boolean> CAULDRON_HAND_CRAFTING;
+    public static final Supplier<Boolean> CAULDRON_IN_WORLD_CRAFTING;
     public static final Supplier<Integer> DYE_RECIPES_PER_LAYER;
     public static final Supplier<Integer> POTION_RECIPES_PER_LAYER;
     //TODO: more cauldron configs
@@ -69,6 +73,15 @@ public class CommonConfigs {
     public static final Supplier<Boolean> TORCH_FIRE_OFFHAND;
     public static final Supplier<Integer> TORCH_FIRE_DURATION;
 
+    public static final Supplier<Boolean> FIRE_CHARGE_GRAVITY;
+    public static final Supplier<Boolean> DRAGON_CHARGE;
+    public static final Supplier<Boolean> DEFLECT_FIRE_CHARGES;
+    public static final Supplier<Boolean> THROWABLE_FIRE_CHARGES;
+    public static final Supplier<Boolean> FIRE_CHARGE_DISPENSER;
+    public static final Supplier<Boolean> FIREBALL_EXPLOSION;
+    public static final Supplier<Integer> CHARGES_COOLDOWN;
+
+    public static final Supplier<Integer> SNOWBALL_FREEZE;
 
     public static final ModConfigHolder SPEC;
 
@@ -80,6 +93,29 @@ public class CommonConfigs {
                 .define("improved_screen", true);
         builder.pop();
 
+        builder.push("fireball");
+        CHARGES_COOLDOWN = builder.comment("Cooldown for fire & dragon charges in ticks")
+                .define("thrown_cooldown", 10, 0, 1000);
+        DRAGON_CHARGE = builder.comment("Adds dragons charge item")
+                .define("dragon_charge", true);
+        FIRE_CHARGE_GRAVITY = builder.comment("Makes fire & dragon charges have gravity")
+                .define("gravity", true);
+        DEFLECT_FIRE_CHARGES = builder.comment("Makes fire charges deflectable by punching")
+                .define("deflectable", false);
+        THROWABLE_FIRE_CHARGES = builder.comment("Allows throwing fire & dragon charges")
+                .define("fire_charges_throwable", true);
+        FIRE_CHARGE_DISPENSER = builder.comment("Makes dispensers shoot fire charges (the ones with gravity added by the mod) instead of blaze charges. Technically a breaking changes as it could break existing contraptions while allowing for new ones")
+                .define("fire_charges_dispenser_behavior", true);
+        FIREBALL_EXPLOSION = builder.comment("Improves ghast & fire charges fireballs by giving them a unique explosion particles and set on fire on hit")
+                .define("improved_explosions", true);
+
+        builder.pop();
+
+        builder.push("snowball");
+        SNOWBALL_FREEZE = builder.comment("Allows snowballs to freeze entities on hit. Config is for how many ticks it will freeze")
+                .define("freeze_ticks", 35, 0, 1000);
+        builder.pop();
+
         builder.push("hanging_signs");
         HANGING_SIGN_ITEM = builder.comment("Allows placing items on hanging signs")
                 .define("items_on_signs", true);
@@ -88,8 +124,10 @@ public class CommonConfigs {
         builder.push("cauldron");
         LIQUID_CAULDRON = builder.comment("Enables enhanced cauldron")
                 .define("enhanced_cauldron", true);
-        CAULDRON_CRAFTING = builder.comment("Allows crafting items using cauldrons by clicking on them")
-                .define("crafting", true);
+        CAULDRON_HAND_CRAFTING = builder.comment("Allows crafting items using cauldrons by clicking on them")
+                .define("hand_crafting", true);
+        CAULDRON_IN_WORLD_CRAFTING = builder.comment("Allows crafting items using cauldrons by throwing items in them")
+                .define("in_world_crafting", true);
         DYE_WATER = builder.comment("Allows dying cauldron water bedrock style and mixing them too")
                 .define("dye_water", true);
         DYE_RECIPES_PER_LAYER = builder.comment("Max amount of items that 1 cauldron layer can recolor." +
@@ -104,11 +142,13 @@ public class CommonConfigs {
                 .define("potion_mixing_limit", 8, 1, 64);
         INVERSE_POTIONS = builder.comment("Map of potion ids to their inverse ids. Used for potion mixing")
                 .defineObject("inverse_potions", CommonConfigs::getInverseEffects,
-                        Utils.optionalMapCodec(BuiltInRegistries.MOB_EFFECT.byNameCodec(),
+                        CodecUtils.optionalMapCodec(BuiltInRegistries.MOB_EFFECT.byNameCodec(),
                                 BuiltInRegistries.MOB_EFFECT.byNameCodec()));
 
         CONNECT_TO_FENCES = builder.comment("Makes cauldrons connect to fences")
                 .define("connect_to_fences", true);
+        LAVA_LAYERS = builder.comment("Makes it so a dripstone drop only increments a cauldron by 1 layer(buttle) instead of a full bottle, making it just like a water cauldron")
+                .define("consistent_lava_layers", false);
         builder.pop();
 
         builder.push("tripwire_hook");
@@ -229,6 +269,9 @@ public class CommonConfigs {
     public static boolean isFlagOn(String s) {
         if (s.equals("dye_water")) {
             return DYE_WATER.get();
+        }
+        if (s.equals("dragon_charge")) {
+            return DRAGON_CHARGE.get();
         }
         return false;
     }

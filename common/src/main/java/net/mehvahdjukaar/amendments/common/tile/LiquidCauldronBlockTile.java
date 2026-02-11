@@ -1,9 +1,11 @@
 package net.mehvahdjukaar.amendments.common.tile;
 
+import com.google.common.base.Preconditions;
 import net.mehvahdjukaar.amendments.common.LiquidMixer;
 import net.mehvahdjukaar.amendments.common.block.DyeCauldronBlock;
 import net.mehvahdjukaar.amendments.common.block.LiquidCauldronBlock;
 import net.mehvahdjukaar.amendments.common.block.ModCauldronBlock;
+import net.mehvahdjukaar.amendments.common.item.DyeBottleItem;
 import net.mehvahdjukaar.amendments.configs.CommonConfigs;
 import net.mehvahdjukaar.amendments.reg.ModRegistry;
 import net.mehvahdjukaar.moonlight.api.MoonlightRegistry;
@@ -20,72 +22,82 @@ import net.mehvahdjukaar.moonlight.api.util.PotionBottleType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.DyeItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gameevent.GameEvent;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
+
+import static net.mehvahdjukaar.amendments.common.block.LiquidCauldronBlock.getAllPotionEffects;
 
 
 public class LiquidCauldronBlockTile extends BlockEntity implements IExtraModelDataProvider, ISoftFluidTankProvider {
     public static final ModelDataKey<ResourceKey<SoftFluid>> FLUID = (ModelDataKey<ResourceKey<SoftFluid>>) new ModelDataKey(ResourceKey.class);
     public static final ModelDataKey<Boolean> GLOWING = new ModelDataKey<>(Boolean.class);
 
-    private final SoftFluidTank fluidTank;
+    @Nullable
+    private SoftFluidTank fluidTank;
     private boolean hasGlowInk = false;
-
-    public SoftFluidTank makeTank(BlockState blockState) {
-        return blockState.getBlock() instanceof DyeCauldronBlock ?
-                createCauldronDyeTank() :
-                createCauldronLiquidTank();
-    }
-
-    private boolean canMixPotions() {
-        var config = CommonConfigs.POTION_MIXING.get();
-        return config == CommonConfigs.MixingMode.ON || (config == CommonConfigs.MixingMode.ONLY_BOILING &&
-                this.getBlockState().getValue(LiquidCauldronBlock.BOILING));
-    }
 
     public LiquidCauldronBlockTile(BlockPos blockPos, BlockState blockState) {
         super(ModRegistry.LIQUID_CAULDRON_TILE.get(), blockPos, blockState);
-        this.fluidTank = makeTank(blockState);
-        //this.fluidHolder.setFluid(ModRegistry.DYE_SOFT_FLUID.get());
     }
 
     @Override
     public void addExtraModelData(ExtraModelData.Builder builder) {
-        builder.with(FLUID, fluidTank.getFluid().getHolder().unwrapKey().get());
+        builder.with(FLUID, getSoftFluidTank().getFluid().getHolder().unwrapKey().get());
         builder.with(GLOWING, hasGlowInk);
     }
 
     @Override
+    public void setLevel(Level level) {
+        super.setLevel(level);
+        getOrCreateTank(level.registryAccess());
+    }
+
+    @Override
     public SoftFluidTank getSoftFluidTank() {
+        return Preconditions.checkNotNull(fluidTank, "Accessing cauldron tank before loadAdditional is was called!");
+    }
+
+    private SoftFluidTank getOrCreateTank(HolderLookup.Provider registries) {
+        if (fluidTank == null) {
+            fluidTank = (this.getBlockState().getBlock() instanceof DyeCauldronBlock) ?
+                    createCauldronDyeTank(registries) :
+                    createCauldronLiquidTank(registries);
+        }
         return fluidTank;
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        this.fluidTank.load(tag, registries);
-        if (this.level != null) {
-            if (this.level.isClientSide) {
-                fluidTank.refreshTintCache();
-                this.requestModelReload();
-            }
-        }
         this.hasGlowInk = tag.getBoolean("glow_ink");
+        this.getOrCreateTank(registries).load(tag, registries);
+        if (this.level != null && this.level.isClientSide) {
+            getSoftFluidTank().refreshTintCache();
+            this.requestModelReload();
+        }
     }
 
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        this.fluidTank.save(tag, registries);
-
         if (this.hasGlowInk) tag.putBoolean("glow_ink", true);
+        this.getSoftFluidTank().save(tag, registries);
     }
 
     @Override
@@ -110,7 +122,7 @@ public class LiquidCauldronBlockTile extends BlockEntity implements IExtraModelD
         BlockState state = this.getBlockState();
 
         if (state.getBlock() instanceof ModCauldronBlock cb) {
-            state = cb.updateStateOnFluidChange(state, level, worldPosition, fluidTank.getFluid());
+            state = cb.updateStateOnFluidChange(state, level, worldPosition, getSoftFluidTank().getFluid());
         }
 
         if (state != this.getBlockState()) {
@@ -126,22 +138,51 @@ public class LiquidCauldronBlockTile extends BlockEntity implements IExtraModelD
     // does all the calculation for handling player interaction.
     public boolean interactWithPlayerItem(Player player, InteractionHand hand, ItemStack stack) {
         //interact with fluid holder
-        if (this.fluidTank.interactWithPlayer(player, hand, level, worldPosition)) {
+        if (this.getSoftFluidTank().interactWithPlayer(player, hand, level, worldPosition)) {
             level.gameEvent(player, GameEvent.BLOCK_CHANGE, worldPosition);
             this.setChanged();
+
+            maybeSendPotionMixMessage(this.getSoftFluidTank().getFluid(), player);
             return true;
         }
         return false;
     }
 
     public void consumeOneLayer() {
-        this.fluidTank.getFluid().shrink(1);
+        this.getSoftFluidTank().getFluid().shrink(1);
+        this.setChanged();
+    }
+
+    public void maybeSendPotionMixMessage(SoftFluidStack stack, Player player) {
+        if (stack.is(MLBuiltinSoftFluids.POTION)) {
+            List<MobEffectInstance> potionEffects = getAllPotionEffects(stack);
+            int potionEffectAmount = potionEffects.size();
+            if (potionEffectAmount == CommonConfigs.POTION_MIXING_LIMIT.get()) {
+                player.displayClientMessage(Component.translatable("message.amendments.cauldron"), true);
+            }
+        }
+    }
+
+
+    public boolean isGlowing() {
+        return hasGlowInk;
+    }
+
+    public void setGlowing(boolean b) {
+        this.hasGlowInk = b;
         this.setChanged();
     }
 
 
-    public SoftFluidTank createCauldronLiquidTank() {
-        return new SoftFluidTank(PlatHelper.getPlatform().isFabric() ? 3 : 4) {
+    private SoftFluidTank createCauldronLiquidTank(HolderLookup.Provider ra) {
+        return new SoftFluidTank(PlatHelper.getPlatform().isFabric() ? 3 : 4, ra) {
+
+            private boolean canMixPotions() {
+                var config = CommonConfigs.POTION_MIXING.get();
+                return config == CommonConfigs.MixingMode.ON || (config == CommonConfigs.MixingMode.ONLY_BOILING &&
+                        LiquidCauldronBlockTile.this.getBlockState().getValue(LiquidCauldronBlock.BOILING));
+            }
+
             @Override
             public boolean isFluidCompatible(SoftFluidStack fluidStack) {
                 if (fluidStack.is(MLBuiltinSoftFluids.WATER)) return false;
@@ -165,10 +206,12 @@ public class LiquidCauldronBlockTile extends BlockEntity implements IExtraModelD
                 super.addFluidOntoExisting(incoming);
             }
         };
+
     }
 
-    public SoftFluidTank createCauldronDyeTank() {
-        return new SoftFluidTank(3) {
+
+    public SoftFluidTank createCauldronDyeTank(HolderLookup.Provider ra) {
+        return new SoftFluidTank(3, ra) {
 
             @Override
             public boolean isFluidCompatible(SoftFluidStack fluidStack) {
@@ -189,15 +232,40 @@ public class LiquidCauldronBlockTile extends BlockEntity implements IExtraModelD
                 }
                 super.addFluidOntoExisting(fluidStack);
             }
+
+            @Override
+            public @Nullable ItemStack interactWithItem(ItemStack stack, Level world, @Nullable BlockPos pos, boolean simulate) {
+                //always allows adding dye. they dont add water
+                if (stack.getItem() instanceof DyeItem di) {
+                    if (!simulate) {
+                        //can always add dye
+                        addDyeItem(di, world, pos);
+                    }
+                    return ItemStack.EMPTY;
+                }
+                return super.interactWithItem(stack, world, pos, simulate);
+            }
+
+            private void addDyeItem(DyeItem dyeItem, Level world, @Nullable BlockPos pos) {
+                SoftFluidStack fluid = this.getFluid();
+                if (!world.isClientSide()) {
+                    int count = fluid.getCount();
+                    if (count == 3) fluid.setCount(2); //hack!!
+                    SoftFluidStack dummyStack = DyeBottleItem.createFluidStack(dyeItem.getDyeColor(), 1, world);
+
+                    SoftFluidStack newFluid = LiquidMixer.mixDye(fluid, dummyStack);
+                    if (newFluid != null) {
+                        newFluid.setCount(count);
+
+                        this.setFluid(newFluid);
+                    }
+                }
+                if (pos != null) {
+                    world.playSound(null, pos, SoundEvents.DYE_USE, SoundSource.BLOCKS, 1.0F, 1.0F);
+                    world.playSound(null, pos, SoundEvents.BUCKET_EMPTY, SoundSource.BLOCKS, 1.0F, 1.3f);
+                }
+            }
         };
-    }
 
-    public boolean isGlowing() {
-        return hasGlowInk;
-    }
-
-    public void setGlowing(boolean b) {
-        this.hasGlowInk = b;
-        this.setChanged();
     }
 }

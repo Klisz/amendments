@@ -2,22 +2,24 @@ package net.mehvahdjukaar.amendments.reg;
 
 import com.google.common.base.Preconditions;
 import it.unimi.dsi.fastutil.objects.Object2ObjectLinkedOpenHashMap;
+import net.mehvahdjukaar.amendments.Amendments;
 import net.mehvahdjukaar.amendments.common.CakeRegistry;
 import net.mehvahdjukaar.amendments.common.LecternEditMenu;
 import net.mehvahdjukaar.amendments.common.block.*;
 import net.mehvahdjukaar.amendments.common.entity.FallingLanternEntity;
+import net.mehvahdjukaar.amendments.common.entity.MediumDragonFireball;
+import net.mehvahdjukaar.amendments.common.entity.MediumFireball;
+import net.mehvahdjukaar.amendments.common.item.DragonChargeItem;
 import net.mehvahdjukaar.amendments.common.item.DyeBottleItem;
 import net.mehvahdjukaar.amendments.common.item.placement.WallLanternPlacement;
+import net.mehvahdjukaar.amendments.common.recipe.CauldronRecipe;
 import net.mehvahdjukaar.amendments.common.recipe.DyeBottleRecipe;
 import net.mehvahdjukaar.amendments.common.tile.*;
 import net.mehvahdjukaar.amendments.configs.CommonConfigs;
-import net.mehvahdjukaar.amendments.integration.CompatHandler;
-import net.mehvahdjukaar.amendments.integration.CompatObjects;
 import net.mehvahdjukaar.moonlight.api.fluids.SoftFluid;
 import net.mehvahdjukaar.moonlight.api.fluids.SoftFluidRegistry;
 import net.mehvahdjukaar.moonlight.api.item.additional_placements.AdditionalItemPlacementsAPI;
-import net.mehvahdjukaar.moonlight.api.misc.DataObjectReference;
-import net.mehvahdjukaar.moonlight.api.misc.DynamicHolder;
+import net.mehvahdjukaar.moonlight.api.misc.HolderRef;
 import net.mehvahdjukaar.moonlight.api.misc.RegSupplier;
 import net.mehvahdjukaar.moonlight.api.misc.Registrator;
 import net.mehvahdjukaar.moonlight.api.platform.PlatHelper;
@@ -26,11 +28,11 @@ import net.mehvahdjukaar.moonlight.api.set.BlockSetAPI;
 import net.mehvahdjukaar.moonlight.api.set.BlocksColorAPI;
 import net.minecraft.Util;
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.damagesource.DamageType;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -41,6 +43,7 @@ import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.RecipeSerializer;
+import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.BannerBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -50,7 +53,6 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.PushReaction;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -64,11 +66,10 @@ public class ModRegistry {
 
     public static void init() {
         BlockSetAPI.registerBlockSetDefinition(CakeRegistry.INSTANCE);
-        BlockSetAPI.addDynamicBlockRegistration(ModRegistry::registerDoubleCakes, CakeRegistry.CakeType.class);
-        AdditionalItemPlacementsAPI.addRegistration(ModRegistry::registerAdditionalPlacements);
+        BlockSetAPI.addDynamicRegistration(Amendments.MOD_ID, ModRegistry::registerDoubleCakes, BuiltInRegistries.BLOCK);
     }
 
-    public static void registerAdditionalPlacements(AdditionalItemPlacementsAPI.Event event) {
+    public static void registerAdditionalPlacements() {
         // this is specifically for things that place a new block in air. Stuff that modifiers blocks is in events.
         // reason is more complicated than this
         var wallLanternPlacement = new WallLanternPlacement();
@@ -77,30 +78,30 @@ public class ModRegistry {
                 Block block = bi.getBlock();
                 Preconditions.checkNotNull(block, "BlockItem " + i + " has a NULL block! This is not an amendments issue and its likely caused by some bigger underlying issue");
                 if (CommonConfigs.WALL_LANTERN.get() && WallLanternBlock.isValidBlock(block)) {
-                    event.register(i, wallLanternPlacement);
+                    AdditionalItemPlacementsAPI.registerPlacement(i, wallLanternPlacement);
                 }
             }
         }
         if (CommonConfigs.HANGING_POT.get()) {
-            event.registerSimple(Items.FLOWER_POT, HANGING_FLOWER_POT.get());
+            AdditionalItemPlacementsAPI.registerSimplePlacement(Items.FLOWER_POT, HANGING_FLOWER_POT.get());
         }
         if (CommonConfigs.CEILING_BANNERS.get()) {
             for (var e : CEILING_BANNERS.entrySet()) {
                 Item item = BannerBlock.byColor(e.getKey()).asItem();
-                if(item == Items.AIR){
-                    throw new IllegalStateException("Block " + e.getValue().get() + " has no corresponding item! How did this happen? Some OTHER mod must have screwed up the block to items map!" );
+                if (item == Items.AIR) {
+                    throw new IllegalStateException("Block " + e.getValue().get() + " has no corresponding item! How did this happen? Some OTHER mod must have screwed up the block to items map!");
                 }
-                event.registerSimple(Preconditions.checkNotNull(item),
+                AdditionalItemPlacementsAPI.registerSimplePlacement(Preconditions.checkNotNull(item),
                         e.getValue().get());
             }
         }
     }
 
-    public static final DynamicHolder<DamageType> BOILING_DAMAGE = DynamicHolder.of(
+    public static final HolderRef<DamageType> BOILING_DAMAGE = HolderRef.of(
             res("boiling"), Registries.DAMAGE_TYPE);
 
 
-    public static final DynamicHolder<SoftFluid> DYE_SOFT_FLUID = DynamicHolder.of(res("dye"),
+    public static final HolderRef<SoftFluid> DYE_SOFT_FLUID = HolderRef.of(res("dye"),
             SoftFluidRegistry.KEY);
 
     public static final RegSupplier<RecipeSerializer<DyeBottleRecipe>> DYE_BOTTLE_RECIPE = RegHelper.registerSpecialRecipe(
@@ -112,13 +113,37 @@ public class ModRegistry {
 
     public static final RegSupplier<SimpleParticleType> BOILING_PARTICLE = RegHelper.registerParticle(res("boiling_bubble"));
     public static final RegSupplier<SimpleParticleType> SPLASH_PARTICLE = RegHelper.registerParticle(res("fluid_splash"));
+    public static final Supplier<SimpleParticleType> DRAGON_FIREBALL_TRAIL_PARTICLE = RegHelper.registerParticle(res("dragon_fireball_trail"));
+    public static final Supplier<SimpleParticleType> FIREBALL_TRAIL_PARTICLE = RegHelper.registerParticle(res("fireball_trail"));
+    public static final Supplier<SimpleParticleType> FIREBALL_EMITTER_PARTICLE = RegHelper.registerParticle(res("fireball_explosion_emitter"));
+    public static final Supplier<SimpleParticleType> FIREBALL_EXPLOSION_PARTICLE = RegHelper.registerParticle(res("fireball_explosion"));
 
-    /* todo
-    private static final Supplier<RecipeType<CauldronRecipe>> CAULDRON_RECIPE = RegHelper.registerRecipeType(
-            res("cauldron_recipe"));
+    public static final RegSupplier<SoundEvent> FIREBALL_EXPLOSION_SOUND = RegHelper.registerSound(res("explosion.fireball"));
 
-    private static final Supplier<RecipeSerializer<CauldronRecipe>> CAULDRON_RECIPE_SERIALIZER = RegHelper.registerSpecialRecipe(
-            res("cauldron_recipe"), CauldronRecipe::new);*/
+    public static final Supplier<RecipeType<CauldronRecipe>> CAULDRON_RECIPE_TYPE = RegHelper.registerRecipeType(
+            res("cauldron_crafting"));
+
+    public static final Supplier<RecipeSerializer<CauldronRecipe>> CAULDRON_RECIPE_SERIALIZER = RegHelper.registerRecipeSerializer(
+            res("cauldron_crafting"), CauldronRecipe.Serializer::new);
+
+    public static final Supplier<EntityType<MediumDragonFireball>> MEDIUM_DRAGON_FIREBALL =
+            regEntity("medium_dragon_fireball",
+                    EntityType.Builder.<MediumDragonFireball>of(MediumDragonFireball::new, MobCategory.MISC)
+                            .sized(0.3125F, 0.3125F)
+                            .clientTrackingRange(16)
+                           // .fireImmune() //same as vanilla
+                            .updateInterval(5));
+
+    public static final Supplier<EntityType<MediumFireball>> MEDIUM_FIREBALL =
+            regEntity("medium_fireball",
+                    EntityType.Builder.<MediumFireball>of(MediumFireball::new, MobCategory.MISC)
+                            .sized(0.3125F, 0.3125F)
+                            .clientTrackingRange(16)
+                            // .fireImmune() //same as vanilla
+                            .updateInterval(5));
+
+    public static final Supplier<Item> DRAGON_CHARGE = regItem(DRAGON_CHARGE_NAME,
+            () -> new DragonChargeItem(new Item.Properties()));
 
     public static final Supplier<Item> DYE_BOTTLE_ITEM = regItem(DYE_BOTTLE_NAME,
             () -> new DyeBottleItem(new Item.Properties()
@@ -209,7 +234,7 @@ public class ModRegistry {
             WALL_LANTERN_NAME, () -> PlatHelper.newBlockEntityType(
                     WallLanternBlockTile::new, WALL_LANTERN.get()));
 
-    public static final Supplier<EntityType<FallingLanternEntity>> FALLING_LANTERN = regEntity(FALLING_LANTERN_NAME, () ->
+    public static final Supplier<EntityType<FallingLanternEntity>> FALLING_LANTERN = regEntity(FALLING_LANTERN_NAME,
             EntityType.Builder.<FallingLanternEntity>of(FallingLanternEntity::new, MobCategory.MISC)
                     .sized(0.98F, 0.98F)
                     .clientTrackingRange(10)
@@ -265,9 +290,8 @@ public class ModRegistry {
 
     public static final Map<CakeRegistry.CakeType, DoubleCakeBlock> DOUBLE_CAKES = new LinkedHashMap<>();
 
-    private static void registerDoubleCakes
-            (Registrator<Block> event, Collection<CakeRegistry.CakeType> cakeTypes) {
-        for (CakeRegistry.CakeType type : cakeTypes) {
+    private static void registerDoubleCakes(Registrator<Block> event) {
+        for (CakeRegistry.CakeType type : CakeRegistry.INSTANCE) {
 
             ResourceLocation id = res(type.getVariantId("double"));
             DoubleCakeBlock block = new DoubleCakeBlock(type);
@@ -290,9 +314,8 @@ public class ModRegistry {
         return RegHelper.registerItem(res(name), sup);
     }
 
-    public static <T extends
-            Entity> Supplier<EntityType<T>> regEntity(String name, Supplier<EntityType.Builder<T>> builder) {
-        return RegHelper.registerEntityType(res(name), () -> builder.get().build(name));
+    public static <T extends Entity> Supplier<EntityType<T>> regEntity(String name, EntityType.Builder<T> builder) {
+        return RegHelper.registerEntityType(res(name), builder);
     }
 
 }

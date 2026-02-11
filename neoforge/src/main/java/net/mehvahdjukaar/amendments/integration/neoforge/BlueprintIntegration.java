@@ -1,10 +1,13 @@
 package net.mehvahdjukaar.amendments.integration.neoforge;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.teamabnormals.blueprint.common.world.modification.structure.StructureModificationContext;
 import com.teamabnormals.blueprint.common.world.modification.structure.StructureRepaletter;
-import com.teamabnormals.blueprint.common.world.modification.structure.StructureRepalleterManager;
+import com.teamabnormals.blueprint.common.world.modification.structure.StructureRepaletterManager;
 import net.mehvahdjukaar.amendments.Amendments;
+import net.mehvahdjukaar.amendments.common.block.StructureCauldronHack;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.ServerLevelAccessor;
@@ -15,14 +18,15 @@ import org.jetbrains.annotations.Nullable;
 public class BlueprintIntegration {
 
     public static void init() {
-        StructureRepalleterManager.registerSerializer(Amendments.res("blockstate_replace"),
+        StructureCauldronHack.register();
+        StructureRepaletterManager.registerRepalleter(Amendments.res("blockstate_replace"),
                 BlockStateRepaletter.CODEC);
     }
 
     public record BlockStateRepaletter(Block replacesBlock, BlockState replacesWith,
-                                       float chance) implements StructureRepaletter {
+                                       float chance) implements StructureRepaletter, StructureRepaletter.Replacer {
 
-        public static final Codec<BlockStateRepaletter> CODEC = RecordCodecBuilder.create(i -> i.group(
+        public static final MapCodec<BlockStateRepaletter> CODEC = RecordCodecBuilder.mapCodec(i -> i.group(
                 BuiltInRegistries.BLOCK.byNameCodec().fieldOf("replaces_block").forGetter(BlockStateRepaletter::replacesBlock),
                 BlockState.CODEC.fieldOf("replaces_with").forGetter(BlockStateRepaletter::replacesWith),
                 Codec.FLOAT.optionalFieldOf("chance", 1f).forGetter(BlockStateRepaletter::chance)
@@ -37,7 +41,17 @@ public class BlueprintIntegration {
         }
 
         @Override
-        public Codec<? extends StructureRepaletter> codec() {
+        public Replacer createReplacer(StructureModificationContext context) {
+            return this;
+        }
+
+        @Override
+        public MapCodec<? extends Replacer> savedTagCodec() {
+            return CODEC;
+        }
+
+        @Override
+        public MapCodec<? extends StructureRepaletter> codec() {
             return CODEC;
         }
     }
