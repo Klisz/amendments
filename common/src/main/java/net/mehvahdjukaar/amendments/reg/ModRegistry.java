@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import it.unimi.dsi.fastutil.objects.Object2ObjectLinkedOpenHashMap;
 import net.mehvahdjukaar.amendments.Amendments;
 import net.mehvahdjukaar.amendments.common.CakeRegistry;
+import net.mehvahdjukaar.amendments.common.LanternRegistry;
 import net.mehvahdjukaar.amendments.common.LecternEditMenu;
 import net.mehvahdjukaar.amendments.common.block.*;
 import net.mehvahdjukaar.amendments.common.entity.FallingLanternEntity;
@@ -38,22 +39,19 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.inventory.MenuType;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraft.world.item.crafting.RecipeType;
-import net.minecraft.world.level.block.BannerBlock;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.PushReaction;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -66,19 +64,21 @@ public class ModRegistry {
 
     public static void init() {
         BlockSetAPI.registerBlockSetDefinition(CakeRegistry.INSTANCE);
+        BlockSetAPI.registerBlockSetDefinition(LanternRegistry.INSTANCE);
         BlockSetAPI.addDynamicRegistration(Amendments.MOD_ID, ModRegistry::registerDoubleCakes, BuiltInRegistries.BLOCK);
+        BlockSetAPI.addDynamicRegistration(Amendments.MOD_ID, ModRegistry::registerWallLanterns, BuiltInRegistries.BLOCK);
+        RegHelper.addExtraBEBlockStatesRegistration(event -> {
+            event.addBlocks(WALL_LANTERN_TILE.get(), WALL_LANTERNS.values().toArray(new WallLanternBlock[0]));
+        });
     }
 
     public static void registerAdditionalPlacements() {
-        // this is specifically for things that place a new block in air. Stuff that modifiers blocks is in events.
-        // reason is more complicated than this
-        var wallLanternPlacement = new WallLanternPlacement();
-        for (var i : BuiltInRegistries.ITEM) {
-            if (i instanceof BlockItem bi) {
-                Block block = bi.getBlock();
-                Preconditions.checkNotNull(block, "BlockItem " + i + " has a NULL block! This is not an amendments issue and its likely caused by some bigger underlying issue");
-                if (CommonConfigs.WALL_LANTERN.get() && WallLanternBlock.isValidBlock(block)) {
-                    AdditionalItemPlacementsAPI.registerPlacement(i, wallLanternPlacement);
+        if (CommonConfigs.WALL_LANTERN.get()) {
+            for (LanternRegistry.LanternType type : LanternRegistry.INSTANCE) {
+                WallLanternBlock wallBlock = WALL_LANTERNS.get(type);
+                if (wallBlock != null) {
+                    AdditionalItemPlacementsAPI.registerPlacement(type.lantern.asItem(),
+                            new WallLanternPlacement(wallBlock));
                 }
             }
         }
@@ -221,18 +221,39 @@ public class ModRegistry {
     );
 
 
-    //wall lantern
-    public static final Supplier<WallLanternBlock> WALL_LANTERN = regBlock(WALL_LANTERN_NAME, () -> {
-        var p = BlockBehaviour.Properties.ofFullCopy(Blocks.LANTERN)
-                .pushReaction(PushReaction.DESTROY)
-                .lightLevel((state) -> 15)
-                .noLootTable();
-        return new WallLanternBlock(p);
-    });
+    public static final Map<LanternRegistry.LanternType, WallLanternBlock> WALL_LANTERNS = new LinkedHashMap<>();
+    // Lantern block id -> its wall lantern, so copper wall lanterns can resolve their oxidation/wax siblings.
+    public static final Map<ResourceLocation, WallLanternBlock> WALL_LANTERNS_BY_LANTERN = new HashMap<>();
+    public static Supplier<BlockEntityType<WallLanternBlockTile>> WALL_LANTERN_TILE = RegHelper.registerBlockEntityType(res(WALL_LANTERN_NAME), () ->
+            PlatHelper.newBlockEntityType(WallLanternBlockTile::new));
 
-    public static final Supplier<BlockEntityType<WallLanternBlockTile>> WALL_LANTERN_TILE = regTile(
-            WALL_LANTERN_NAME, () -> PlatHelper.newBlockEntityType(
-                    WallLanternBlockTile::new, WALL_LANTERN.get()));
+    private static void registerWallLanterns(Registrator<Block> event) {
+        for (LanternRegistry.LanternType type : LanternRegistry.INSTANCE) {
+            ResourceLocation id = res(type.getVariantId("wall"));
+            var p = BlockBehaviour.Properties.ofFullCopy(type.lantern)
+                    .pushReaction(PushReaction.DESTROY)
+                    .noLootTable();
+            WallLanternBlock block = makeWallLantern(p, type);
+            type.addChild("wall_lantern", block);
+            event.register(id, block);
+            WALL_LANTERNS.put(type, block);
+            WALL_LANTERNS_BY_LANTERN.put(type.getId(), block);
+        }
+    }
+
+    private static WallLanternBlock makeWallLantern(BlockBehaviour.Properties p, LanternRegistry.LanternType type) {
+        // Copper lanterns (e.g. Caverns & Chasms) become fully fledged copper blocks. Unwaxed ones are
+        // WeatheringCopper so they oxidize over time; the oxidation/waxing block pairs are contributed to
+        // the loader's copper data maps so axes and honeycomb also work through vanilla plumbing. Waxed
+        // copper lanterns stay plain wall lanterns - they only need to be a target/source of those pairs.
+        if (type.lantern instanceof WeatheringCopper) {
+            return new WeatheringWallLanternBlock(p, type);
+        }
+        return new WallLanternBlock(p, type);
+    }
+
+    //backward compat
+    public static Supplier<WallLanternBlock> WALL_LANTERN = () -> WALL_LANTERNS.get(LanternRegistry.VANILLA);
 
     public static final Supplier<EntityType<FallingLanternEntity>> FALLING_LANTERN = regEntity(FALLING_LANTERN_NAME,
             EntityType.Builder.<FallingLanternEntity>of(FallingLanternEntity::new, MobCategory.MISC)

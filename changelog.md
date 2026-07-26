@@ -1,1 +1,1 @@
-misc fixes
+- improved mod compat

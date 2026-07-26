@@ -1,7 +1,6 @@
 package net.mehvahdjukaar.amendments;
 
 import com.google.common.base.Suppliers;
-import dev.architectury.injectables.annotations.ExpectPlatform;
 import net.mehvahdjukaar.amendments.client.ClientResourceGenerator;
 import net.mehvahdjukaar.amendments.client.ItemHoldingAnimationsManager;
 import net.mehvahdjukaar.amendments.client.WallLanternModelsManager;
@@ -15,9 +14,9 @@ import net.mehvahdjukaar.amendments.common.block.BoilingWaterCauldronBlock;
 import net.mehvahdjukaar.amendments.configs.ClientConfigs;
 import net.mehvahdjukaar.amendments.integration.CompatHandler;
 import net.mehvahdjukaar.amendments.integration.CompatObjects;
-import net.mehvahdjukaar.amendments.integration.FlywheelCompat;
 import net.mehvahdjukaar.amendments.integration.SuppCompat;
 import net.mehvahdjukaar.amendments.reg.ModRegistry;
+import net.mehvahdjukaar.candlelight.api.PlatformImpl;
 import net.mehvahdjukaar.moonlight.api.client.model.NestedModelLoader;
 import net.mehvahdjukaar.moonlight.api.misc.EventCalled;
 import net.mehvahdjukaar.moonlight.api.platform.ClientHelper;
@@ -25,7 +24,6 @@ import net.mehvahdjukaar.moonlight.api.platform.RegHelper;
 import net.mehvahdjukaar.moonlight.api.set.BlocksColorAPI;
 import net.mehvahdjukaar.moonlight.api.util.Utils;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.FallingBlockRenderer;
@@ -43,12 +41,16 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.properties.WoodType;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
+// TODO: rewrite as Vanillin compat for 1.21
+// import net.mehvahdjukaar.amendments.integration.FlywheelCompat;
 
 
 public class AmendmentsClient {
@@ -139,8 +141,9 @@ public class AmendmentsClient {
         ClientHelper.addEntityRenderersRegistration(AmendmentsClient::registerEntityRenderers);
         ClientHelper.addItemColorsRegistration(AmendmentsClient::registerItemColors);
         ClientHelper.addParticleRegistration(AmendmentsClient::registerParticles);
-
-        if (CompatHandler.FLYWHEEL) FlywheelCompat.init();
+        ClientHelper.addMenuScreensRegistration(AmendmentsClient::registerMenuScreens);
+        // TODO: rewrite as Vanillin compat for 1.21
+        // if (CompatHandler.FLYWHEEL) FlywheelCompat.init();
     }
 
 
@@ -157,15 +160,21 @@ public class AmendmentsClient {
         ClientHelper.registerRenderType(ModRegistry.LIQUID_CAULDRON.get(), RenderType.cutout(), RenderType.translucent());
         ClientHelper.registerRenderType(ModRegistry.DYE_CAULDRON.get(), RenderType.cutout(), RenderType.translucent());
         ClientHelper.registerRenderType(ModRegistry.HANGING_FLOWER_POT.get(), RenderType.cutout());
-        ClientHelper.registerRenderType(ModRegistry.WALL_LANTERN.get(), RenderType.cutout());
+        for (var wallLantern : ModRegistry.WALL_LANTERNS.values()) {
+            ClientHelper.registerRenderType(wallLantern, RenderType.cutout());
+        }
         ClientHelper.registerRenderType(ModRegistry.TOOL_HOOK.get(), RenderType.cutout());
-        MenuScreens.register(ModRegistry.LECTERN_EDIT_MENU.get(), LecternBookEditScreen::new);
+
     }
 
     public static void afterTagSetup() {
         ItemHoldingAnimationsManager.addAnimations();
     }
 
+    @EventCalled
+    private static void registerMenuScreens(ClientHelper.MenuScreenEvent event) {
+        event.register(ModRegistry.LECTERN_EDIT_MENU.get(), LecternBookEditScreen::new);
+    }
 
     @EventCalled
     private static void registerItemColors(ClientHelper.ItemColorEvent event) {
@@ -243,6 +252,7 @@ public class AmendmentsClient {
 
     @EventCalled
     private static void registerSpecialModels(ClientHelper.SpecialModelEvent event) {
+        WallLanternModelsManager.refreshModels(Minecraft.getInstance().getResourceManager());
         WallLanternModelsManager.registerSpecialModels(event);
         event.register(BELL_CHAIN);
         if (CompatHandler.SUPPLEMENTARIES) event.register(BELL_ROPE);
@@ -272,7 +282,8 @@ public class AmendmentsClient {
     @EventCalled
     private static void registerBlockColors(ClientHelper.BlockColorEvent event) {
         List<Block> mimics = new ArrayList<>();
-        mimics.addAll(List.of(ModRegistry.WALL_LANTERN.get(), ModRegistry.HANGING_FLOWER_POT.get(),
+        mimics.addAll(ModRegistry.WALL_LANTERNS.values());
+        mimics.addAll(List.of(ModRegistry.HANGING_FLOWER_POT.get(),
                 ModRegistry.WATERLILY_BLOCK.get()));
         mimics.addAll(ModRegistry.DOUBLE_CAKES.values());
         event.register(new MimicBlockColor(), mimics.toArray(new Block[0]));
@@ -288,14 +299,22 @@ public class AmendmentsClient {
         if (RECORD_MATERIALS.isEmpty()) {
             for (var i : BuiltInRegistries.ITEM) {
                 if (i.components().get(DataComponents.JUKEBOX_PLAYABLE) != null) {
-                    RECORD_MATERIALS.put(i, new Material(TextureAtlas.LOCATION_BLOCKS,
-                            Amendments.res("block/music_discs/" + Utils.getID(i).toString()
-                                    .replace("minecraft:", "")
-                                    .replace(":", "/"))));
+                    RECORD_MATERIALS.put(i, discMaterial(i));
                 }
+            }
+            if (CompatHandler.CAVERNS_AND_CHASMS) {
+                Item i = BuiltInRegistries.ITEM.get(ResourceLocation.fromNamespaceAndPath("caverns_and_chasms", "music_disc_copy"));
+                RECORD_MATERIALS.put(i, discMaterial(i));
             }
         }
         return RECORD_MATERIALS;
+    }
+
+    private static @NotNull Material discMaterial(Item i) {
+        return new Material(TextureAtlas.LOCATION_BLOCKS,
+                Amendments.res("block/music_discs/" + Utils.getID(i).toString()
+                        .replace("minecraft:", "")
+                        .replace(":", "/")));
     }
 
     public static Material getRecordMaterial(Item item) {
@@ -336,7 +355,7 @@ public class AmendmentsClient {
         }
     }
 
-    @ExpectPlatform
+    @PlatformImpl
     public static boolean hasFixedNormals() {
         throw new AssertionError();
     }
